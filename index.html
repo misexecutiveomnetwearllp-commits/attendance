@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Attendance report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7/dist/face-api.js"></script>
+<style>
+  :root {
+    --paper: #F3F5F2; --card: #FFFFFF; --ink: #17242E; --muted: #5E6B73; --rule: #D5DBD6;
+    --green: #1E7A4F; --green-bg: #DDEFE4; --red: #B8412F; --red-bg: #F6DEDA;
+    --amber: #94640C; --amber-bg: #F7EACB; --blue: #2F5F9E; --blue-bg: #DCE6F4;
+    --purple: #5B3F92; --purple-bg: #E9E2F5; --off-bg: #E7EAE8; --rose: #A0386A; --rose-bg: #FBE3EC;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink);
+         font-family: "Hanken Grotesk", system-ui, sans-serif; font-size: 16px; line-height: 1.45;
+         font-variant-numeric: tabular-nums; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 16px;
+         padding: 16px 28px; border-bottom: 1px solid var(--rule); }
+  .company { font-weight: 700; font-size: 19px; }
+  .clock { text-align: right; }
+  .clock b { display: block; font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+  .clock span { color: var(--muted); font-size: 14px; }
+
+  .stage { display: grid; grid-template-columns: minmax(320px, 5fr) 7fr; gap: 28px;
+           padding: 28px; max-width: 1320px; margin: 0 auto; align-items: start; }
+
+  .viewport { position: relative; aspect-ratio: 4 / 3; background: var(--ink); border-radius: 18px; overflow: hidden; }
+  .viewport video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block; }
+  .oval { position: absolute; left: 50%; top: 46%; width: 46%; height: 70%; transform: translate(-50%, -50%);
+          border: 3px dashed rgba(255,255,255,.55); border-radius: 50%; transition: border-color .2s; }
+  .viewport.scanning .oval { border-style: solid; border-color: #6FD39E; animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 10px rgba(111,211,158,.18); } }
+  .hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 90%;
+          background: rgba(23,36,46,.82); color: #fff; padding: 8px 16px; border-radius: 999px;
+          font-size: 15px; text-align: center; }
+
+  .btn { min-height: 64px; border-radius: 12px; font-size: 18px; font-weight: 700; cursor: pointer;
+         border: 1.5px solid var(--ink); background: var(--card); padding: 10px 16px; }
+  .btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.wide { width: 100%; margin-top: 16px; }
+  .btn.small { min-height: 44px; font-size: 15px; font-weight: 600; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .link { background: none; border: 0; color: var(--muted); text-decoration: underline; cursor: pointer;
+          margin-top: 14px; padding: 6px 0; font-size: 15px; }
+
+  .panel { background: var(--card); border: 1px solid var(--rule); border-radius: 18px; padding: 28px; min-height: 540px; }
+  .view[hidden] { display: none; }
+
+  .idle h2 { font-size: 30px; line-height: 1.15; margin: 8px 0 24px; max-width: 18ch; }
+  .steps { list-style: none; padding: 0; margin: 0; counter-reset: s; }
+  .steps li { counter-increment: s; display: grid; grid-template-columns: 40px 1fr; gap: 14px;
+              padding: 16px 0; border-top: 1px solid var(--rule); }
+  .steps li::before { content: counter(s); width: 32px; height: 32px; border-radius: 50%; background: var(--paper);
+                      display: grid; place-items: center; font-weight: 700; }
+  .steps b { display: block; }
+  .steps span { color: var(--muted); }
+
+  .result { display: flex; flex-direction: column; justify-content: center; min-height: 480px; }
+  .result .verb { font-size: 40px; font-weight: 800; line-height: 1.05; color: var(--red); margin: 0; }
+  .result .detail { color: var(--muted); font-size: 19px; margin: 14px 0 0; max-width: 40ch; }
+
+  .rep-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+  .rep-head h2 { margin: 0; font-size: 28px; line-height: 1.1; }
+  .rep-head p { margin: 4px 0 0; color: var(--muted); }
+  .rep-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input { border: 1.5px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: #fff; min-height: 44px; }
+
+  .net { margin: 26px 0 0; padding: 20px 0; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
+         display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .net small { display: block; color: var(--muted); font-size: 15px; }
+  .net strong { font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+  .net .ed { text-align: right; background: var(--purple-bg); border-radius: 12px; padding: 10px 16px; }
+  .net .ed small { color: var(--purple); }
+  .net .ed strong { font-size: 28px; letter-spacing: 0; color: var(--purple); }
+  .calc tr.sub td { font-weight: 700; border-bottom: 1px solid var(--ink); }
+  .calc .note { color: var(--muted); font-size: 14px; }
+  .partial { color: var(--amber); font-size: 15px; margin: 8px 0 0; }
+
+  .calc { width: 100%; max-width: 520px; border-collapse: collapse; margin: 14px 0 6px; }
+  .calc td { padding: 8px 0; border-bottom: 1px solid var(--rule); }
+  .calc td:last-child { text-align: right; font-weight: 600; }
+  .calc tr.minus td:last-child { color: var(--red); }
+  .calc tr.plus td:last-child { color: var(--purple); }
+  .calc tr.total td { font-weight: 800; font-size: 18px; border-bottom: 0; border-top: 2px solid var(--ink); }
+
+  .stats { display: flex; flex-wrap: wrap; margin: 20px 0; border: 1px solid var(--rule); border-radius: 12px; }
+  .stats div { flex: 1 1 84px; padding: 10px 14px; border-right: 1px solid var(--rule); }
+  .stats div:last-child { border-right: 0; }
+  .stats b { display: block; font-size: 22px; }
+  .stats span { color: var(--muted); font-size: 14px; }
+  .stats .warn b { color: var(--red); }
+
+  .reg h3 { font-size: 15px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+  .dow, .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .dow div { font-size: 13px; color: var(--muted); text-align: center; padding-bottom: 4px; }
+  .cell { min-height: 58px; border-radius: 8px; padding: 6px 7px; display: flex; flex-direction: column;
+          justify-content: space-between; background: var(--off-bg); }
+  .cell .n { font-size: 13px; color: var(--muted); }
+  .cell .c { font-size: 18px; font-weight: 800; text-align: right; }
+  .cell.P { background: var(--green-bg); } .cell.P .c { color: var(--green); }
+  .cell.A { background: var(--red-bg); } .cell.A .c { color: var(--red); }
+  .cell.HD { background: var(--amber-bg); } .cell.HD .c { color: var(--amber); }
+  .cell.L { background: var(--blue-bg); } .cell.L .c { color: var(--blue); }
+  .cell.WO .c { color: var(--muted); }
+  .cell.ED { background: var(--purple-bg); } .cell.ED .c { color: var(--purple); }
+  .cell.H { background: var(--rose-bg); } .cell.H .c { color: var(--rose); }
+  .cell.NM { background: #fff; box-shadow: inset 0 0 0 1.5px var(--red); } .cell.NM .c { color: var(--red); }
+  .cell.Q { background: repeating-linear-gradient(45deg, #fff, #fff 6px, var(--red-bg) 6px, var(--red-bg) 12px); }
+  .cell.FUT { background: transparent; box-shadow: inset 0 0 0 1px var(--rule); }
+  .cell.empty { background: transparent; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 14px; }
+
+  .admin h2 { margin: 0 0 6px; font-size: 26px; }
+  .admin p { color: var(--muted); margin: 0 0 20px; }
+  .field { display: grid; gap: 6px; margin-bottom: 16px; max-width: 420px; }
+  .field label { font-weight: 600; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .dots { display: flex; gap: 8px; margin: 18px 0 8px; }
+  .dots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--rule); }
+  .dots span.on { background: var(--green); border-color: var(--green); }
+  .msg { min-height: 24px; font-weight: 600; }
+  .msg.ok { color: var(--green); } .msg.bad { color: var(--red); }
+
+  @media (max-width: 900px) {
+    .stage { grid-template-columns: 1fr; padding: 16px; gap: 16px; }
+    .bar { padding: 12px 16px; }
+    .panel { padding: 20px; min-height: 0; }
+    .result { min-height: 240px; }
+    .cell { min-height: 46px; padding: 4px 5px; }
+    .cell .c { font-size: 14px; }
+    .net strong { font-size: 38px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .viewport.scanning .oval { animation: none; } }
+  @media print {
+    .bar, .cam, .rep-tools, #countdown { display: none !important; }
+    .stage { display: block; padding: 0; }
+    .panel { border: 0; padding: 0; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="company" id="company">Company</div>
+  <div class="clock"><b id="clockTime">--:--</b><span id="clockDate"></span></div>
+</header>
+
+<main class="stage">
+  <section class="cam">
+    <div class="viewport" id="viewport">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="oval"></div>
+      <div class="hint" id="hint">Loading face models…</div>
+    </div>
+    <button class="btn primary wide" id="btnReport" disabled>Show my report</button>
+    <button class="link" id="btnAdmin">Register a face (admin)</button>
+  </section>
+
+  <section class="panel" aria-live="polite">
+    <div class="view idle" id="viewIdle">
+      <h2>Apni attendance aur salary dekhein</h2>
+      <ol class="steps">
+        <li><div><b>Camera ke saamne khade ho jaayein</b><span>Chehra oval ke andar rakhein, mask hata dein.</span></div></li>
+        <li><div><b>Show my report dabayein</b><span>Pichhle mahine ki attendance aur cash salary dikhegi.</span></div></li>
+        <li><div><b>Report 60 second mein band ho jaayegi</b><span>Pehle band karni ho to Close dabayein.</span></div></li>
+      </ol>
+    </div>
+
+    <div class="view result" id="viewResult" hidden>
+      <p class="verb" id="resVerb"></p>
+      <p class="detail" id="resDetail"></p>
+    </div>
+
+    <div class="view report" id="viewReport" hidden>
+      <div class="rep-head">
+        <div>
+          <h2 id="repName"></h2>
+          <p id="repMeta"></p>
+        </div>
+        <div class="rep-tools">
+          <select id="repMonth" aria-label="Month"></select>
+          <button class="btn small" id="btnPrint">Print</button>
+          <button class="btn small" id="btnClose">Close</button>
+        </div>
+      </div>
+
+      <div class="net">
+        <div><small id="netLabel">Cash payable</small><strong id="netPay"></strong></div>
+        <div class="ed"><small id="edLabel">Extra day (ED)</small><strong id="edAmount"></strong></div>
+      </div>
+      <p class="partial" id="partial" hidden>Ye mahina abhi chal raha hai. Amount aaj tak ke paid days ka hai.</p>
+
+      <table class="calc" id="calc"></table>
+
+      <div class="stats" id="stats"></div>
+
+      <div class="reg">
+        <h3 id="regTitle">Attendance register</h3>
+        <div class="dow"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+        <div class="grid" id="grid"></div>
+        <div class="legend">
+          <span><i style="background:var(--green-bg)"></i>P Present</span>
+          <span><i style="background:var(--red-bg)"></i>A Absent</span>
+          <span><i style="background:var(--amber-bg)"></i>HD Half day</span>
+          <span><i style="background:var(--blue-bg)"></i>L Leave</span>
+          <span><i style="background:var(--off-bg)"></i>WO Week off</span>
+          <span><i style="background:var(--rose-bg)"></i>H Holiday</span>
+          <span><i style="background:var(--purple-bg)"></i>ED Extra day</span>
+          <span><i style="background:#fff;box-shadow:inset 0 0 0 1.5px var(--red)"></i>– Not marked</span>
+        </div>
+      </div>
+
+      <div class="foot">
+        <span id="countdown"></span>
+        <span>Galti lage to owner se baat karein.</span>
+      </div>
+    </div>
+
+    <div class="view admin" id="viewAdmin" hidden>
+      <h2>Register a face</h2>
+      <p>Employee camera ke saamne khada ho. Sar thoda ghumate hue 5 photo li jaayengi.</p>
+      <div class="field">
+        <label for="pin">Admin PIN</label>
+        <div class="row">
+          <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+          <button class="btn small" id="btnLoadEmp">Load employees</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="empSelect">Employee</label>
+        <select id="empSelect" disabled><option value="">Enter PIN first</option></select>
+      </div>
+      <button class="btn primary" id="btnCapture" disabled>Capture face and save</button>
+      <div class="dots" id="dots"></div>
+      <p class="msg" id="adminMsg"></p>
+      <button class="link" id="btnAdminClose">Back</button>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ===================== SETTINGS: yahan badlein ===================== */
+const APP = {
+  API_URL: 'PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE',
+  COMPANY: 'Your Company Name',
+  MODEL_URL: 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7/model/',
+  REPORT_AUTOCLOSE_SEC: 60,
+  ERROR_AUTOCLOSE_SEC: 8,
+  SCAN_SAMPLES: 3,
+  REGISTER_PROMPTS: ['Look straight', 'Turn head slightly left', 'Turn head slightly right', 'Chin slightly up', 'Look straight again']
+};
+/* =================================================================== */
+
+const $ = id => document.getElementById(id);
+const video = $('video');
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+const inr2 = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 });
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+let busy = false, ready = false, idleTimer = null, countdownTimer = null, lastDescriptor = null, adminPin = '';
+
+$('company').textContent = APP.COMPANY;
+document.title = APP.COMPANY + ' attendance report';
+
+function tick() {
+  const now = new Date();
+  $('clockTime').textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  $('clockDate').textContent = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+tick(); setInterval(tick, 1000);
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const setHint = t => { $('hint').textContent = t; };
+
+function show(view) {
+  ['viewIdle', 'viewResult', 'viewReport', 'viewAdmin'].forEach(v => $(v).hidden = v !== view);
+  clearTimeout(idleTimer); clearInterval(countdownTimer);
+  if (view !== 'viewReport') lastDescriptor = null;
+}
+
+function setBusy(on) {
+  busy = on;
+  $('viewport').classList.toggle('scanning', on);
+  $('btnReport').disabled = on || !ready;
+  $('btnCapture').disabled = on || !ready || !$('empSelect').value;
+}
+
+function showError(title, text) {
+  show('viewResult');
+  $('resVerb').textContent = title;
+  $('resDetail').textContent = text;
+  idleTimer = setTimeout(() => show('viewIdle'), APP.ERROR_AUTOCLOSE_SEC * 1000);
+}
+
+async function api(payload) {
+  if (!APP.API_URL.startsWith('https://script.google.com')) throw new Error('index.html mein API_URL set nahi hai.');
+  let res;
+  try { res = await fetch(APP.API_URL, { method: 'POST', body: JSON.stringify(payload) }); }
+  catch (e) { throw new Error('Google Sheet se connect nahi ho paya. Internet check karein.'); }
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Server error.');
+  return data;
+}
+
+/* ---------- Camera + models ---------- */
+async function init() {
+  try {
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(APP.MODEL_URL),
+      faceapi.nets.faceLandmark68Net.loadFromUri(APP.MODEL_URL),
+      faceapi.nets.faceRecognitionNet.loadFromUri(APP.MODEL_URL)
+    ]);
+    setHint('Starting camera…');
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    video.srcObject = stream;
+    await new Promise(r => video.onloadedmetadata = r);
+    ready = true;
+    setHint('Ready');
+    setBusy(false);
+  } catch (e) {
+    const denied = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    setHint(denied ? 'Camera permission blocked. Browser settings mein camera allow karein.' : 'Could not start: ' + (e.message || e));
+  }
+}
+
+async function captureDescriptors(count, prompts, onEach) {
+  const opts = new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.5 });
+  const out = [];
+  let tries = 0;
+  while (out.length < count && tries < count * 25) {
+    tries++;
+    if (prompts) setHint(prompts[out.length]);
+    const faces = await faceapi.detectAllFaces(video, opts).withFaceLandmarks().withFaceDescriptors();
+    if (faces.length === 1 && faces[0].detection.box.width > video.videoWidth * 0.2) {
+      out.push(Array.from(faces[0].descriptor));
+      if (onEach) onEach(out.length);
+      await sleep(prompts ? 900 : 120);
+    } else {
+      if (!prompts) setHint(faces.length > 1 ? 'Camera ke saamne sirf ek vyakti' : faces.length ? 'Thoda paas aayein' : 'Chehra nahi dikh raha');
+      await sleep(150);
+    }
+  }
+  if (out.length < count) throw new Error('Chehra saaf capture nahi hua. Achhi roshni mein dobara try karein.');
+  return out;
+}
+
+function average(list) {
+  const a = new Array(128).fill(0);
+  list.forEach(d => d.forEach((v, i) => a[i] += v / list.length));
+  return a.map(v => Math.round(v * 1e5) / 1e5);
+}
+
+/* ---------- Report ---------- */
+async function loadReport(month) {
+  if (busy) return;
+  setBusy(true);
+  try {
+    if (!month) {
+      setHint('Hold still…');
+      lastDescriptor = average(await captureDescriptors(APP.SCAN_SAMPLES));
+    }
+    setHint('Loading report…');
+    const keep = lastDescriptor;
+    const r = await api({ action: 'report', descriptor: keep, month });
+    renderReport(r);
+    lastDescriptor = keep;
+  } catch (e) {
+    showError('Report nahi khuli', e.message);
+  } finally {
+    setHint('Ready'); setBusy(false);
+  }
+}
+
+$('btnReport').onclick = () => loadReport();
+$('repMonth').onchange = () => { if (lastDescriptor) loadReport($('repMonth').value); };
+$('btnClose').onclick = () => show('viewIdle');
+$('btnPrint').onclick = () => window.print();
+
+function renderReport(r) {
+  show('viewReport');
+  const e = r.employee, s = r.summary, sal = r.salary;
+  $('repName').textContent = e.name;
+  $('repMeta').textContent = [e.id, e.designation, e.department].filter(Boolean).join(', ');
+  $('repMonth').innerHTML = r.months.map(m => `<option value="${esc(m.key)}" ${m.key === r.month.key ? 'selected' : ''}>${esc(m.label)}</option>`).join('');
+  $('netLabel').textContent = (r.month.partial ? 'Cash payable till today, ' : 'Cash payable for ') + r.month.label;
+  $('netPay').textContent = inr.format(sal.payable);
+  $('edLabel').textContent = `Extra day (ED), ${sal.edDays} ${sal.edDays === 1 ? 'day' : 'days'}`;
+  $('edAmount').textContent = '+ ' + inr.format(sal.edAmount);
+  $('partial').hidden = !r.month.partial;
+
+  let rowsHtml = `<tr><td>${esc(sal.baseLabel)}</td><td>${inr.format(sal.base)}</td></tr>`;
+  sal.deductions.forEach(x => { rowsHtml += `<tr class="minus"><td>${esc(x.label)}</td><td>− ${inr.format(x.amount)}</td></tr>`; });
+  if (sal.deductions.length) {
+    rowsHtml += `<tr class="sub"><td>Salary after deduction</td><td>${inr.format(sal.afterDeduction)}</td></tr>`;
+  }
+  rowsHtml += `<tr class="plus"><td>Extra day (ED), ${sal.edDays} × ${inr2.format(sal.perDay)}</td><td>+ ${inr.format(sal.edAmount)}</td></tr>`;
+  rowsHtml += `<tr class="total"><td>Payable</td><td>${inr.format(sal.payable)}</td></tr>`;
+  rowsHtml += `<tr><td colspan="2" class="note">Per day ${inr2.format(sal.perDay)} = ${inr.format(sal.monthly)} ÷ ${sal.basis}</td></tr>`;
+  $('calc').innerHTML = rowsHtml;
+
+  const stats = [['Present', s.present], ['Absent', s.absent], ['Half day', s.halfDay], ['Leave', s.leave],
+                 ['Week off', s.weekOff], ['Holiday', s.holiday], ['Extra day', s.extra]];
+  let html = stats.map(([l, v]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+  if (s.notMarked) html += `<div class="warn"><b>${s.notMarked}</b><span>Not marked</span></div>`;
+  if (s.wrong) html += `<div class="warn"><b>${s.wrong}</b><span>Wrong code</span></div>`;
+  $('stats').innerHTML = html;
+
+  $('regTitle').textContent = 'Attendance register, ' + r.month.label;
+  const text = { P: 'P', A: 'A', HD: 'HD', L: 'L', WO: 'WO', H: 'H', ED: 'ED', NM: '–', '?': '?', FUT: '' };
+  let g = '';
+  for (let i = 0; i < r.days[0].dow; i++) g += '<div class="cell empty"></div>';
+  r.days.forEach(d => {
+    const cls = d.status === '?' ? 'Q' : d.status;
+    const title = d.holiday ? ` title="${esc(d.holiday)}"` : '';
+    g += `<div class="cell ${cls}"${title}><span class="n">${d.d}</span><span class="c">${text[d.status] ?? ''}</span></div>`;
+  });
+  $('grid').innerHTML = g;
+
+  let left = APP.REPORT_AUTOCLOSE_SEC;
+  $('countdown').textContent = `Closes in ${left}s`;
+  countdownTimer = setInterval(() => {
+    left--;
+    $('countdown').textContent = `Closes in ${left}s`;
+    if (left <= 0) show('viewIdle');
+  }, 1000);
+}
+
+/* ---------- Admin: register face ---------- */
+function adminMsg(t, ok) { $('adminMsg').textContent = t; $('adminMsg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
+
+$('btnAdmin').onclick = () => { show('viewAdmin'); $('pin').focus(); };
+$('btnAdminClose').onclick = () => { adminPin = ''; $('pin').value = ''; show('viewIdle'); };
+$('empSelect').onchange = () => setBusy(false);
+
+$('btnLoadEmp').onclick = async () => {
+  try {
+    adminMsg('Loading…', true);
+    const r = await api({ action: 'employees', pin: $('pin').value });
+    adminPin = $('pin').value;
+    $('empSelect').innerHTML = '<option value="">Select employee</option>' +
+      r.employees.map(x => `<option value="${esc(x.id)}">${esc(x.name)} (${esc(x.id)})${x.registered ? ', already registered' : ''}</option>`).join('');
+    $('empSelect').disabled = false;
+    adminMsg(r.employees.length + ' employees loaded.', true);
+  } catch (e) { adminMsg(e.message, false); }
+};
+
+$('btnCapture').onclick = async () => {
+  const empId = $('empSelect').value;
+  if (!empId || busy) return;
+  setBusy(true);
+  const n = APP.REGISTER_PROMPTS.length;
+  $('dots').innerHTML = '<span></span>'.repeat(n);
+  try {
+    adminMsg('Camera par likhe instructions follow karein.', true);
+    const samples = await captureDescriptors(n, APP.REGISTER_PROMPTS, k => $('dots').children[k - 1].classList.add('on'));
+    setHint('Saving…');
+    const r = await api({ action: 'register', pin: adminPin, empId, descriptors: samples.map(d => d.map(v => Math.round(v * 1e5) / 1e5)) });
+    adminMsg(r.message, true);
+    const opt = $('empSelect').selectedOptions[0];
+    if (opt && !opt.textContent.includes('already registered')) opt.textContent += ', already registered';
+  } catch (e) {
+    adminMsg(e.message, false);
+  } finally {
+    setHint('Ready'); setBusy(false);
+  }
+};
+
+init();
+</script>
+</body>
+</html>
